@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel DS49 | Inversión Habitacional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    
+    <!-- LEAFLET PARA EL MAPA -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .chart-container { position: relative; height: 100%; width: 100%; min-height: 350px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .bg-brand { background-color: #00306b; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col overflow-x-hidden">
+
+    <!-- OVERLAY DE CARGA -->
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white transition-opacity duration-300">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-5"></div>
+        <h2 class="text-xl font-bold tracking-wider">Cargando base de datos DS49...</h2>
+        <p class="text-sm text-slate-400 mt-2">Conectando mediante Live Server</p>
+    </div>
+
+    <!-- GLOSARIO MODAL -->
+    <div id="glossary-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h2 class="text-lg font-bold text-[#00306b]"><i class="fa-solid fa-book-open mr-2"></i> Glosario de Variables Financieras DS49</h2>
+                <button onclick="toggleGlossary()" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto custom-scrollbar text-sm text-slate-600 space-y-4">
+                <h3 class="font-bold text-slate-800 border-b pb-2">1. Costo Directo de la Vivienda y el Proyecto</h3>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Base:</strong> Monto inicial garantizado por familia.</li>
+                    <li><strong>Localización:</strong> Premio si el proyecto está bien ubicado.</li>
+                    <li><strong>Factibilidad:</strong> Para conectar redes de agua potable, alcantarillado y electricidad.</li>
+                    <li><strong>Densif. en Altura:</strong> Bono extra para proyectos de departamentos.</li>
+                    <li><strong>Grupo Familiar:</strong> Financia vivienda más grande para familias numerosas.</li>
+                    <li><strong>Discap. / Mov. Reducida:</strong> Adaptaciones generales o para sillas de ruedas.</li>
+                    <li><strong>Equipamiento / Ley de Aportes:</strong> Espacios comunes, áreas verdes y mitigación vial.</li>
+                    <li><strong>Habilitación de Terreno:</strong> Movimiento de tierra y muros de contención.</li>
+                    <li><strong>Territorios Especiales:</strong> Bono en zonas donde materiales/mano de obra son más caros.</li>
+                    <li><strong>Mediana Escala:</strong> Incentivo para condominios más pequeños.</li>
+                    <li><strong>Incremento Habitacional:</strong> Mejora de estándar térmico o terminaciones.</li>
+                    <li><strong>Premio al Ahorro:</strong> Premio estatal por superar el ahorro mínimo.</li>
+                </ul>
+                <h3 class="font-bold text-slate-800 border-b pb-2 mt-6">2. Gastos de Gestión y Trámites</h3>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Asistencia Técnica:</strong> Pago a la Entidad Patrocinante (diseño, apoyo social y trámites).</li>
+                    <li><strong>Fiscalización (FTO):</strong> Pago al inspector independiente.</li>
+                    <li><strong>Aranceles al CBR:</strong> Para Conservador y Notario (escrituras a costo cero).</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANTALLA DE INICIO (LANDING) -->
+    <div id="landing-view" class="h-screen w-full bg-brand relative overflow-hidden flex flex-col items-center justify-center text-white z-40">
+        <div class="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+            <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-700 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-pulse"></div>
+            <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-indigo-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-pulse"></div>
+        </div>
+        <div class="relative z-10 text-center px-6 max-w-3xl mx-auto flex flex-col items-center">
+            <div class="mb-8 inline-flex p-6 bg-white rounded-3xl shadow-2xl">
+                <img src="https://gptw-web-site.s3.amazonaws.com/assets/uploads/2021/09/05124203/Logo-CCHC-2021.jpg" alt="CChC" class="h-14 w-auto object-contain" />
+            </div>
+            <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight mb-4 text-white">Proyectos Seleccionados DS49</h1>
+            <p class="text-sm md:text-base text-slate-200 font-normal tracking-wide max-w-2xl mb-10 leading-relaxed">
+                Visualizador de datos del Fondo Solidario de Elección de Vivienda (DS49). Análisis de entidades patrocinantes, constructoras, familias beneficiadas y financiamiento en UF.
+            </p>
+            <button onclick="enterDashboard()" class="group relative px-8 py-4 bg-white text-[#00306b] font-bold rounded-xl shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center gap-3 overflow-hidden">
+                <span>INGRESAR AL PANEL</span>
+                <i class="fa-solid fa-arrow-right transition-transform group-hover:translate-x-1"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dashboard-view" class="hidden flex-grow flex flex-col h-screen overflow-hidden animate-fade-in">
+        <header class="bg-brand text-white shadow-md z-30 shrink-0">
+            <div class="max-w-[1400px] mx-auto px-4 h-16 flex items-center justify-between">
+                
+                <div class="flex items-center space-x-3 overflow-hidden">
+                    <button onclick="exitDashboard()" class="text-slate-300 hover:text-white mr-1 transition-colors" title="Volver a Portada">
+                        <i class="fa-solid fa-arrow-left text-base"></i>
+                    </button>
+                    <img src="https://gptw-web-site.s3.amazonaws.com/assets/uploads/2021/09/05124203/Logo-CCHC-2021.jpg" alt="CChC" class="h-9 bg-white p-1 rounded-lg object-contain shrink-0" />
+                    <div class="truncate pl-1 hidden sm:block">
+                        <h1 class="text-sm sm:text-base font-bold tracking-tight truncate">Visor Proyectos DS49</h1>
+                        <p class="text-[10px] text-slate-300 truncate">Monitoreo de Llamados y Subsidios</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleGlossary()" class="bg-white/10 hover:bg-white/20 text-white text-xs py-1.5 px-3 rounded-full transition-colors flex items-center gap-2">
+                        <i class="fa-solid fa-circle-info"></i> <span class="hidden sm:inline">Glosario</span>
+                    </button>
+                    <button onclick="toggleSidebar()" class="bg-white text-[#00306b] text-xs py-1.5 px-4 rounded-full transition-colors flex items-center gap-2 font-black shadow-md border border-slate-200 hover:bg-slate-50">
+                        <i class="fa-solid fa-sliders"></i> <span class="hidden sm:inline">Filtros</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-grow max-w-[1400px] w-full mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6 overflow-hidden h-full">
+            
+            <!-- SIDEBAR FILTROS -->
+            <aside id="sidebar-panel" class="w-full lg:w-72 shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden h-full transition-all duration-300">
+                <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h2 class="text-sm font-bold uppercase text-[#00306b]"><i class="fa-solid fa-sliders mr-2"></i> Filtros</h2>
+                    <button onclick="toggleSidebar()" class="lg:hidden text-slate-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+
+                <div class="p-5 space-y-5 overflow-y-auto custom-scrollbar flex-grow">
+                    <!-- AÑO -->
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Año de Selección</label>
+                        <select id="filter-year" onchange="applyFilters()" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm text-slate-700 font-bold focus:border-blue-500 outline-none"></select>
+                    </div>
+
+                    <!-- REGIÓN -->
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Región (Principal)</label>
+                        <select id="filter-region" onchange="applyFilters()" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-700 font-semibold focus:border-blue-500 outline-none"></select>
+                    </div>
+
+                    <hr class="border-slate-100">
+
+                    <!-- PROVINCIA -->
+                    <div class="filter-wrapper relative">
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Provincia</label>
+                        <div class="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 hover:border-blue-400 flex justify-between cursor-pointer" onclick="toggleMultiSelect('dropdown-provincia', event)">
+                            <span id="label-provincia" class="truncate pr-2 font-medium">Todas las Provincias</span>
+                            <i class="fa-solid fa-chevron-down text-slate-400"></i>
+                        </div>
+                        <div id="dropdown-provincia" class="hidden absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto custom-scrollbar p-1"></div>
+                    </div>
+
+                    <!-- LLAMADO -->
+                    <div class="filter-wrapper relative">
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Número de Llamado</label>
+                        <div class="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 hover:border-blue-400 flex justify-between cursor-pointer" onclick="toggleMultiSelect('dropdown-llamado', event)">
+                            <span id="label-llamado" class="truncate pr-2 font-medium">Todos los Llamados</span>
+                            <i class="fa-solid fa-chevron-down text-slate-400"></i>
+                        </div>
+                        <div id="dropdown-llamado" class="hidden absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto custom-scrollbar p-1"></div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- SECCIÓN PRINCIPAL -->
+            <section class="flex-grow flex flex-col gap-5 overflow-y-auto custom-scrollbar h-full pr-2">
+                
+                <!-- KPIs SECCIÓN -->
+                <div class="shrink-0 flex flex-col gap-2">
+                    <button onclick="toggleKPIs()" class="flex items-center gap-2 self-start text-[11px] font-bold text-slate-500 hover:text-[#00306b] transition-colors uppercase tracking-wider">
+                        <i id="kpi-icon" class="fa-solid fa-chevron-up transition-transform duration-300"></i> Ocultar / Mostrar Indicadores Clave
+                    </button>
+                    
+                    <div id="kpi-panel" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 transition-all duration-300 origin-top overflow-hidden">
+                        <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center">
+                            <div class="bg-blue-50 p-4 rounded-lg text-[#00306b] mr-4"><i class="fa-solid fa-building-user text-2xl"></i></div>
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Proyectos Únicos</p>
+                                <h3 id="kpi-proyectos" class="text-2xl font-black text-slate-800">0</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center">
+                            <div class="bg-emerald-50 p-4 rounded-lg text-emerald-600 mr-4"><i class="fa-solid fa-people-roof text-2xl"></i></div>
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Total Familias</p>
+                                <h3 id="kpi-familias" class="text-2xl font-black text-slate-800">0</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center">
+                            <div class="bg-indigo-50 p-4 rounded-lg text-indigo-600 mr-4"><i class="fa-solid fa-house text-2xl"></i></div>
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Total Viviendas</p>
+                                <h3 id="kpi-viviendas" class="text-2xl font-black text-slate-800">0</h3>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center">
+                            <div class="bg-amber-50 p-4 rounded-lg text-amber-600 mr-4"><i class="fa-solid fa-money-bill-wave text-2xl"></i></div>
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Financiamiento Total</p>
+                                <h3 id="kpi-inversion" class="text-xl lg:text-2xl font-black text-slate-800">0 <span class="text-xs font-bold text-slate-500">UF</span></h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRÁFICOS APILADOS -->
+                <div class="grid grid-cols-1 gap-5 shrink-0">
+                    
+                    <!-- MAPA LEAFLET -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[450px]">
+                        <div class="p-3 border-b border-slate-100 bg-slate-50 relative flex justify-between items-center z-[1001]">
+                            <h3 class="text-xs font-bold text-slate-700 uppercase"><i class="fa-solid fa-map-location-dot text-[#00306b] mr-1"></i> Densidad de Proyectos por Comuna</h3>
+                            
+                            <button id="map-clear-filter" onclick="window.clearMapFilter()" class="hidden bg-red-500 hover:bg-red-600 text-white text-[10px] px-3 py-1 rounded-full shadow-md flex items-center gap-1 font-bold transition-colors">
+                                <i class="fa-solid fa-xmark"></i> Quitar Filtro de Mapa
+                            </button>
+                        </div>
+                        
+                        <div class="relative flex-grow w-full z-10" id="map-wrapper">
+                            <div id="map" class="absolute inset-0"></div>
+                            <div id="map-lock-indicator" class="absolute top-2 right-2 z-[1000] bg-slate-700/90 text-white text-[10px] px-3 py-1.5 rounded-md shadow-md pointer-events-none transition-colors border border-slate-600/50">
+                                <i class="fa-solid fa-lock text-rose-400"></i> Doble clic para interactuar
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GRÁFICO COMPOSICIÓN FINANCIERA -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[450px] p-4">
+                        <h3 class="text-xs font-bold text-slate-700 uppercase border-b border-slate-100 pb-2 mb-2">
+                            <i class="fa-solid fa-chart-column text-[#00306b] mr-1"></i> Composición de Inversión Total (UF)
+                        </h3>
+                        <div class="chart-container flex-grow"><canvas id="chart-finanzas"></canvas></div>
+                    </div>
+
+                    <!-- TABLA -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col shrink-0 mb-6">
+                        <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between gap-3">
+                            <h3 class="text-xs font-bold text-slate-700 uppercase pt-2"><i class="fa-solid fa-list text-[#00306b] mr-1"></i> Listado Completo de Llamados</h3>
+                            <input type="text" id="table-search" oninput="renderTable()" placeholder="Buscar código, nombre, EP..." class="bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-3 text-xs w-full sm:w-72 focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div class="overflow-x-auto custom-scrollbar max-h-[500px]">
+                            <table class="w-full text-left text-xs whitespace-nowrap">
+                                <thead class="bg-slate-50 text-slate-500 sticky top-0 z-20">
+                                    <tr>
+                                        <th class="py-2.5 px-4">Fecha Llamado</th>
+                                        <th class="py-2.5 px-4">Nombre Proyecto</th>
+                                        <th class="py-2.5 px-4">Comuna</th>
+                                        <th class="py-2.5 px-4 text-center">Familias (Este llamado)</th>
+                                        <th class="py-2.5 px-4 text-center">Viviendas Físicas</th>
+                                        <th class="py-2.5 px-4 text-right">Financiamiento (Este llamado)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-body" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const DEFAULT_BASE_URL = "./CNT_DS49.json.gz";
+        let rawData = [];
+        let filteredData = []; 
+        
+        let activeFilters = { 
+            year: "", 
+            region: "Maule", 
+            provincia: [], 
+            llamado: [],
+            mapComuna: "",   
+            mapId: ""  
+        };
+        
+        let mapInstance = null;
+        let mapMarkers = [];
+        let mapLocked = true;
+        let chartFinanzas = null;
+
+        window.addEventListener('load', () => {
+            document.getElementById('loading-overlay').classList.add('hidden');
+        });
+
+        async function enterDashboard() {
+            document.getElementById('landing-view').classList.add('hidden');
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            
+            try {
+                const res = await fetch(DEFAULT_BASE_URL);
+                if (!res.ok) throw new Error("No se encontró el archivo local.");
+                const buffer = await res.arrayBuffer();
+                const decompressed = pako.ungzip(new Uint8Array(buffer), { to: 'string' });
+                rawData = parseRawJson(JSON.parse(decompressed));
+                
+                setupInitialFilters();
+                
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('dashboard-view').classList.remove('hidden');
+                
+                setTimeout(() => { applyFilters(); }, 100);
+
+            } catch (err) {
+                alert("Error cargando datos. Verifica que uses Live Server y que CNT_DS49.json.gz esté en la carpeta.\n" + err.message);
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('landing-view').classList.remove('hidden');
+            }
+        }
+
+        function exitDashboard() {
+            document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('landing-view').classList.remove('hidden');
+        }
+
+        function normH(str) { return str ? str.toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : ""; }
+        
+        function formatDate(val) {
+            if (!val || val === "S/I") return "S/I";
+            const str = val.toString().trim();
+            if (/^\d{12,14}$/.test(str)) {
+                const d = new Date(parseInt(str));
+                return d.toLocaleDateString('es-CL', { timeZone: 'UTC' });
+            }
+            if (/^\d{4,5}$/.test(str)) {
+                const utcDate = new Date(Date.UTC(1899, 11, 30) + parseInt(str) * 24 * 60 * 60 * 1000);
+                return utcDate.toLocaleDateString('es-CL', { timeZone: 'UTC' });
+            }
+            return str;
+        }
+
+        function parseNum(val) {
+            if (!val) return 0;
+            let s = val.toString().trim().replace(/[\$\sUF]/g, '');
+            if (s.includes(',') && s.includes('.')) {
+                if (s.indexOf('.') < s.indexOf(',')) s = s.replace(/\./g, '').replace(',', '.');
+                else s = s.replace(/,/g, '');
+            } else if (s.includes(',')) s = s.replace(',', '.');
+            const n = parseFloat(s); return isNaN(n) ? 0 : n;
+        }
+
+        function parseRawJson(data) {
+            return data.map(row => {
+                const nr = {};
+                Object.keys(row).forEach(k => nr[normH(k)] = row[k]);
+                
+                let yearStr = (nr['ano seleccion'] || "").toString();
+                let yearMatch = yearStr.match(/\d{4}/);
+                
+                let lat = parseNum(nr['latitud (decimal)']);
+                let lng = parseNum(nr['longitud (decimal)']);
+                if(lat < -100) lat = lat / 10000;
+                if(lng < -100) lng = lng / 10000;
+
+                return {
+                    id: (nr['id'] || "S/I").toString(),
+                    year: yearMatch ? yearMatch[0] : "S/I",
+                    llamado: (nr['numero llamado'] || "S/I").toString(),
+                    fecha: formatDate(nr['fecha']),
+                    region: nr['region'] || "Sin Región",
+                    provincia: nr['provincia'] || "Sin Provincia",
+                    comuna: nr['comuna'] || "Sin Comuna",
+                    codigo: (nr['codigo proyecto'] || "S/I").toString(),
+                    nombre: nr['nombre proyecto'] || "Sin Nombre",
+                    familias: parseNum(nr['n° familias/unidades']),
+                    viviendas: parseNum(nr['n° viviendas']),
+                    total_uf: parseNum(nr['financiamiento total (uf)']),
+                    lat: lat,
+                    lng: lng,
+                    ep: nr['nombre ep'] || "S/I",
+                    ec: nr['nombre ec'] || "S/I",
+                    
+                    f_base: parseNum(nr['subsidio base']),
+                    f_loc: parseNum(nr['bono de localizacion']),
+                    f_fact: parseNum(nr['factibilidad']),
+                    f_dens: parseNum(nr['densif. en altura']),
+                    f_grup: parseNum(nr['grupo familiar']),
+                    f_disc: parseNum(nr['discapacidad']) + parseNum(nr['movilidad reducida']),
+                    f_eq: parseNum(nr['equipamiento']) + parseNum(nr['equipamiento (ley de aportes)']),
+                    f_hab: parseNum(nr['habilitacion de terreno']),
+                    f_terr: parseNum(nr['territores especiales']),
+                    f_med: parseNum(nr['mediana escala']),
+                    f_inc: parseNum(nr['incremento habitacional']),
+                    f_prem: parseNum(nr['premio al ahorro']),
+                    g_asist: parseNum(nr['asistencia tecnica']),
+                    g_fto: parseNum(nr['fiscalizacion tecnica de obra']),
+                    g_cbr: parseNum(nr['aranceles al cbr'])
+                };
+            });
+        }
+
+        function setupInitialFilters() {
+            const years = [...new Set(rawData.map(d => d.year).filter(y => y !== "S/I"))].sort().reverse();
+            const regions = [...new Set(rawData.map(d => d.region))].sort();
+            
+            const selYear = document.getElementById('filter-year');
+            selYear.innerHTML = '';
+            years.forEach(y => selYear.innerHTML += `<option value="${y}">${y}</option>`);
+            activeFilters.year = years.length ? years[0] : "";
+            selYear.value = activeFilters.year;
+
+            const selReg = document.getElementById('filter-region');
+            selReg.innerHTML = '';
+            regions.forEach(r => selReg.innerHTML += `<option value="${r}">${r}</option>`);
+            
+            const hasMaule = regions.find(r => r.toLowerCase().includes('maule'));
+            activeFilters.region = hasMaule || (regions.length ? regions[0] : "");
+            selReg.value = activeFilters.region;
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar-panel');
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('lg:flex');
+            
+            setTimeout(() => {
+                if(mapInstance) mapInstance.invalidateSize();
+                if(chartFinanzas) chartFinanzas.resize();
+            }, 300);
+        }
+
+        function toggleKPIs() {
+            const panel = document.getElementById('kpi-panel');
+            const icon = document.getElementById('kpi-icon');
+            if(panel.classList.contains('h-0')) {
+                panel.classList.remove('h-0', 'opacity-0');
+                panel.classList.add('opacity-100');
+                panel.style.height = panel.scrollHeight + "px";
+                setTimeout(() => panel.style.height = 'auto', 300);
+                icon.classList.remove('rotate-180');
+            } else {
+                panel.style.height = panel.scrollHeight + "px";
+                setTimeout(() => {
+                    panel.style.height = "0px";
+                    panel.classList.remove('opacity-100');
+                    panel.classList.add('h-0', 'opacity-0');
+                }, 10);
+                icon.classList.add('rotate-180');
+            }
+        }
+
+        function toggleMultiSelect(id, e) {
+            e.stopPropagation();
+            document.getElementById(id).classList.toggle('hidden');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.filter-wrapper')) {
+                document.querySelectorAll('[id^="dropdown-"]').forEach(d => d.classList.add('hidden'));
+            }
+        });
+
+        function handleMultiSelect(key, val, isChecked) {
+            if(val === 'ALL') activeFilters[key] = [];
+            else {
+                if(isChecked && !activeFilters[key].includes(val)) activeFilters[key].push(val);
+                else if(!isChecked) activeFilters[key] = activeFilters[key].filter(v => v !== val);
+            }
+            window.clearMapFilter(false); 
+            applyFilters();
+        }
+
+        function applyFilters() {
+            activeFilters.year = document.getElementById('filter-year').value;
+            activeFilters.region = document.getElementById('filter-region').value;
+
+            const baseData = rawData.filter(d => d.year === activeFilters.year && d.region === activeFilters.region);
+            
+            // PROVINCIAS
+            const provincias = [...new Set(baseData.map(d => d.provincia))].sort();
+            const dropProvincia = document.getElementById('dropdown-provincia');
+            dropProvincia.innerHTML = `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer"><input type="checkbox" onchange="handleMultiSelect('provincia', 'ALL', this.checked)" ${activeFilters.provincia.length===0?'checked':''} class="mr-2"> <b>Todas las Provincias</b></label><hr class="my-1">`;
+            provincias.forEach(pr => {
+                const chk = activeFilters.provincia.includes(pr) ? 'checked' : '';
+                dropProvincia.innerHTML += `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" value="${pr}" onchange="handleMultiSelect('provincia', this.value, this.checked)" ${chk} class="mr-2"> ${pr}</label>`;
+            });
+            document.getElementById('label-provincia').textContent = activeFilters.provincia.length === 0 ? "Todas las Provincias" : `${activeFilters.provincia.length} seleccionadas`;
+
+            // LLAMADOS
+            const llamados = [...new Set(baseData.map(d => d.llamado))].sort((a,b)=> a-b);
+            const dropLlamado = document.getElementById('dropdown-llamado');
+            dropLlamado.innerHTML = `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer"><input type="checkbox" onchange="handleMultiSelect('llamado', 'ALL', this.checked)" ${activeFilters.llamado.length===0?'checked':''} class="mr-2"> <b>Todos los Llamados</b></label><hr class="my-1">`;
+            llamados.forEach(ll => {
+                const chk = activeFilters.llamado.includes(ll) ? 'checked' : '';
+                dropLlamado.innerHTML += `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" value="${ll}" onchange="handleMultiSelect('llamado', this.value, this.checked)" ${chk} class="mr-2"> Llamado N° ${ll}</label>`;
+            });
+            document.getElementById('label-llamado').textContent = activeFilters.llamado.length === 0 ? "Todos los Llamados" : `${activeFilters.llamado.length} seleccionados`;
+
+            // APLICAR
+            filteredData = baseData.filter(d => 
+                (activeFilters.llamado.length === 0 || activeFilters.llamado.includes(d.llamado)) &&
+                (activeFilters.provincia.length === 0 || activeFilters.provincia.includes(d.provincia))
+            );
+
+            updateDashboard();
+        }
+
+        window.applyMapFilter = function(type, value) {
+            if(type === 'comuna') {
+                activeFilters.mapComuna = value;
+                activeFilters.mapId = "";
+            } else if(type === 'proyecto') {
+                activeFilters.mapComuna = "";
+                activeFilters.mapId = value.toString();
+            }
+            document.getElementById('map-clear-filter').classList.remove('hidden');
+            
+            if(mapInstance) mapInstance.closePopup();
+            updateDashboard();
+        };
+
+        window.clearMapFilter = function(forceUpdate = true) {
+            activeFilters.mapComuna = "";
+            activeFilters.mapId = "";
+            document.getElementById('map-clear-filter').classList.add('hidden');
+            if(forceUpdate) updateDashboard();
+        };
+
+        function updateDashboard() {
+            let finalData = filteredData;
+            
+            if (activeFilters.mapComuna) {
+                finalData = finalData.filter(d => d.comuna === activeFilters.mapComuna);
+            }
+            if (activeFilters.mapId) {
+                finalData = finalData.filter(d => d.id === activeFilters.mapId);
+            }
+
+            const uniqueProjects = new Map();
+            finalData.forEach(d => { if(!uniqueProjects.has(d.codigo)) uniqueProjects.set(d.codigo, d); });
+            const uniqueProjectsArray = Array.from(uniqueProjects.values());
+
+            document.getElementById('kpi-proyectos').textContent = uniqueProjects.size;
+            document.getElementById('kpi-familias').textContent = finalData.reduce((acc, p) => acc + p.familias, 0).toLocaleString('es-CL');
+            document.getElementById('kpi-viviendas').textContent = uniqueProjectsArray.reduce((acc, p) => acc + p.viviendas, 0).toLocaleString('es-CL');
+            document.getElementById('kpi-inversion').innerHTML = `${finalData.reduce((acc, p) => acc + p.total_uf, 0).toLocaleString('es-CL', {maximumFractionDigits:0})} <span class="text-xs font-bold text-slate-500">UF</span>`;
+
+            renderMap(filteredData); 
+            renderFinances(finalData); 
+            renderTable(finalData);    
+        }
+
+        // MAPA AGRUPADO POR COMUNAS
+        function renderMap(projects) {
+            if(!mapInstance) {
+                mapInstance = L.map('map', {
+                    scrollWheelZoom: false,
+                    dragging: false,
+                    doubleClickZoom: false 
+                }).setView([-35.42, -71.65], 8);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(mapInstance);
+
+                mapInstance.getContainer().addEventListener('dblclick', (e) => {
+                    mapLocked = !mapLocked;
+                    const ind = document.getElementById('map-lock-indicator');
+                    
+                    if(mapLocked) {
+                        mapInstance.scrollWheelZoom.disable();
+                        mapInstance.dragging.disable();
+                        ind.innerHTML = '<i class="fa-solid fa-lock text-rose-400"></i> Doble clic para interactuar';
+                        ind.classList.replace('bg-emerald-600', 'bg-slate-700/90');
+                    } else {
+                        mapInstance.scrollWheelZoom.enable();
+                        mapInstance.dragging.enable();
+                        ind.innerHTML = '<i class="fa-solid fa-lock-open text-white"></i> Mapa Desbloqueado';
+                        ind.classList.replace('bg-slate-700/90', 'bg-emerald-600');
+                    }
+                    e.stopPropagation();
+                });
+            }
+
+            mapMarkers.forEach(m => mapInstance.removeLayer(m));
+            mapMarkers = [];
+
+            if(projects.length === 0) return;
+
+            const comunasMap = {};
+            projects.forEach(p => {
+                if(p.lat && p.lng && p.lat !== 0) {
+                    if(!comunasMap[p.comuna]) {
+                        comunasMap[p.comuna] = { lat: p.lat, lng: p.lng, familias: 0, viviendas: 0, total_uf: 0, proyectos: [], uniqueCodes: new Set() };
+                    }
+                    comunasMap[p.comuna].familias += p.familias;
+                    comunasMap[p.comuna].total_uf += p.total_uf;
+                    if (!comunasMap[p.comuna].uniqueCodes.has(p.codigo)) {
+                        comunasMap[p.comuna].uniqueCodes.add(p.codigo);
+                        comunasMap[p.comuna].viviendas += p.viviendas;
+                    }
+                    comunasMap[p.comuna].proyectos.push(p);
+                }
+            });
+
+            const bounds = L.latLngBounds();
+            
+            Object.keys(comunasMap).forEach(comunaName => {
+                const data = comunasMap[comunaName];
+                const radius = Math.max(8, Math.min(35, (data.familias / 15))); 
+                
+                const isSelected = activeFilters.mapComuna === comunaName;
+                const fillCol = isSelected ? "#f59e0b" : "#2563eb";
+                const borderCol = isSelected ? "#b45309" : "#00306b";
+
+                const circle = L.circleMarker([data.lat, data.lng], {
+                    radius: radius,
+                    fillColor: fillCol,
+                    color: borderCol,
+                    weight: isSelected ? 3 : 2,
+                    opacity: 1,
+                    fillOpacity: isSelected ? 0.9 : 0.6
+                }).addTo(mapInstance);
+
+                let proyectosHtml = data.proyectos.map(p => {
+                    const isProjSelected = activeFilters.mapId === p.id;
+                    return `
+                    <li class="py-2 border-b border-slate-100 last:border-0 ${isProjSelected ? 'bg-amber-50 rounded px-1' : ''}">
+                        <div class="flex justify-between items-start gap-2">
+                            <div>
+                                <b class="text-[#00306b]">${p.nombre} (Llamado ${p.llamado})</b> <br>
+                                <span class="text-[10px] text-slate-500">EP: ${p.ep} | EC: ${p.ec}</span>
+                            </div>
+                            <button type="button" onclick="window.applyMapFilter('proyecto', '${p.id}')" class="shrink-0 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded px-2 py-1 text-[9px] font-bold transition-colors shadow-sm border border-blue-100">
+                                Filtrar
+                            </button>
+                        </div>
+                    </li>
+                `}).join('');
+                
+                circle.bindPopup(`
+                    <div class="text-xs max-h-64 overflow-y-auto custom-scrollbar pr-2 w-64">
+                        <div class="flex justify-between items-center mb-2">
+                            <b class="text-[#00306b] text-sm uppercase"><i class="fa-solid fa-location-dot"></i> ${comunaName}</b>
+                            <button type="button" onclick="window.applyMapFilter('comuna', '${comunaName}')" class="bg-[#00306b] text-white hover:bg-blue-800 rounded px-2 py-1 text-[9px] font-bold transition-colors shadow-sm">
+                                Filtrar Comuna
+                            </button>
+                        </div>
+                        <div class="mb-2 pb-2 border-b-2 border-slate-200 text-slate-600">
+                            <b>Consolidado Comunal (Sin Duplicar):</b><br>
+                            Viviendas Físicas: ${data.viviendas}<br>
+                            Inversión Asignada: ${data.total_uf.toLocaleString('es-CL')} UF
+                        </div>
+                        <b>Desglose de Llamados (${data.proyectos.length}):</b>
+                        <ul class="mt-1">
+                            ${proyectosHtml}
+                        </ul>
+                    </div>
+                `, { maxWidth: 350 });
+                
+                mapMarkers.push(circle);
+                bounds.extend([data.lat, data.lng]);
+            });
+
+            if(mapMarkers.length > 0 && !activeFilters.mapComuna && !activeFilters.mapId) {
+                mapInstance.fitBounds(bounds, {padding: [30, 30]});
+            }
+        }
+
+        // GRÁFICO FINANZAS APILADO
+        function renderFinances(projects) {
+            if(projects.length === 0) {
+                if(chartFinanzas) chartFinanzas.destroy();
+                return;
+            }
+
+            let sums = { base:0, loc:0, fact:0, dens:0, grup:0, disc:0, eq:0, hab:0, terr:0, med:0, inc:0, prem:0, asist:0, fto:0, cbr:0 };
+            
+            projects.forEach(p => {
+                sums.base += p.f_base; sums.loc += p.f_loc; sums.fact += p.f_fact; sums.dens += p.f_dens;
+                sums.grup += p.f_grup; sums.disc += p.f_disc; sums.eq += p.f_eq; sums.hab += p.f_hab;
+                sums.terr += p.f_terr; sums.med += p.f_med; sums.inc += p.f_inc; sums.prem += p.f_prem;
+                sums.asist += p.g_asist; sums.fto += p.g_fto; sums.cbr += p.g_cbr;
+            });
+
+            const otrosCostos = sums.dens + sums.grup + sums.disc + sums.hab + sums.terr + sums.med + sums.inc;
+
+            const datasets = [
+                { label: 'Subsidio Base', data: [sums.base, 0], backgroundColor: '#1e3a8a' },
+                { label: 'Localización', data: [sums.loc, 0], backgroundColor: '#1d4ed8' },
+                { label: 'Factibilidad', data: [sums.fact, 0], backgroundColor: '#2563eb' },
+                { label: 'Equipamiento', data: [sums.eq, 0], backgroundColor: '#3b82f6' },
+                { label: 'Premio Ahorro', data: [sums.prem, 0], backgroundColor: '#60a5fa' },
+                { label: 'Otros Costos Directos', data: [otrosCostos, 0], backgroundColor: '#93c5fd' },
+                { label: 'Asistencia Técnica', data: [0, sums.asist], backgroundColor: '#b45309' },
+                { label: 'Fiscalización (FTO)', data: [0, sums.fto], backgroundColor: '#d97706' },
+                { label: 'Aranceles al CBR', data: [0, sums.cbr], backgroundColor: '#fbbf24' }
+            ];
+
+            if(chartFinanzas) chartFinanzas.destroy();
+            chartFinanzas = new Chart(document.getElementById('chart-finanzas'), {
+                type: 'bar',
+                data: {
+                    labels: ['Costo Directo de la Vivienda', 'Gastos de Gestión y Trámites'],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, ticks: { callback: function(val) { return val.toLocaleString('es-CL'); } } }
+                    },
+                    plugins: { 
+                        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if(context.parsed.y === 0) return null;
+                                    return ' ' + context.dataset.label + ': ' + context.parsed.y.toLocaleString('es-CL') + ' UF';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // TABLA Y BÚSQUEDA
+        function renderTable(projects = null) {
+            if(!projects) {
+                const searchVal = document.getElementById('table-search').value.toLowerCase();
+                let baseForSearch = filteredData;
+                
+                if (activeFilters.mapComuna) baseForSearch = baseForSearch.filter(d => d.comuna === activeFilters.mapComuna);
+                if (activeFilters.mapId) baseForSearch = baseForSearch.filter(d => d.id === activeFilters.mapId);
+                
+                projects = baseForSearch.filter(p => 
+                    p.codigo.toString().toLowerCase().includes(searchVal) || p.nombre.toLowerCase().includes(searchVal) || p.ep.toLowerCase().includes(searchVal)
+                );
+            }
+
+            projects.sort((a, b) => {
+                const parseDateStr = (dStr) => {
+                    if (!dStr || dStr === "S/I") return 0;
+                    const parts = dStr.split('-');
+                    if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+                    return 0;
+                };
+                return parseDateStr(b.fecha) - parseDateStr(a.fecha);
+            });
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            
+            projects.forEach(p => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50 transition-colors border-b border-slate-50">
+                        <td class="py-3 px-4 font-bold text-slate-800">${p.fecha}</td>
+                        <td class="py-3 px-4">
+                            <div class="font-semibold text-slate-700 max-w-[200px] truncate" title="${p.nombre}">${p.nombre}</div>
+                            <div class="text-[9px] text-slate-400 truncate max-w-[200px]">EP: ${p.ep} | Cód: ${p.codigo} (Llamado ${p.llamado})</div>
+                        </td>
+                        <td class="py-3 px-4 text-slate-500">${p.comuna}</td>
+                        <td class="py-3 px-4 text-center font-bold text-blue-700">${p.familias}</td>
+                        <td class="py-3 px-4 text-center font-bold text-indigo-600">${p.viviendas}</td>
+                        <td class="py-3 px-4 text-right font-bold text-emerald-600">${p.total_uf.toLocaleString('es-CL')}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function toggleGlossary() {
+            document.getElementById('glossary-modal').classList.toggle('hidden');
+        }
+    </script>
+</body>
+</html>
