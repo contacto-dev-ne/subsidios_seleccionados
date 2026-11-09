@@ -53,6 +53,7 @@
                     <li><strong>Discap. / Mov. Reducida:</strong> Adaptaciones generales o para sillas de ruedas.</li>
                     <li><strong>Equipamiento / Ley de Aportes:</strong> Espacios comunes, áreas verdes y mitigación vial.</li>
                     <li><strong>Habilitación de Terreno:</strong> Movimiento de tierra y muros de contención.</li>
+                    <li><strong>Habilitación Adicional / Albergue:</strong> Costos extraordinarios para el terreno y vivienda transitoria.</li>
                     <li><strong>Territorios Especiales:</strong> Bono en zonas donde materiales/mano de obra son más caros.</li>
                     <li><strong>Mediana Escala:</strong> Incentivo para condominios más pequeños.</li>
                     <li><strong>Incremento Habitacional:</strong> Mejora de estándar térmico o terminaciones.</li>
@@ -158,6 +159,26 @@
                             <i class="fa-solid fa-chevron-down text-slate-400"></i>
                         </div>
                         <div id="dropdown-llamado" class="hidden absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto custom-scrollbar p-1"></div>
+                    </div>
+
+                    <!-- MODALIDAD -->
+                    <div class="filter-wrapper relative">
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Modalidad</label>
+                        <div class="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 hover:border-blue-400 flex justify-between cursor-pointer" onclick="toggleMultiSelect('dropdown-modalidad', event)">
+                            <span id="label-modalidad" class="truncate pr-2 font-medium">Todas las Modalidades</span>
+                            <i class="fa-solid fa-chevron-down text-slate-400"></i>
+                        </div>
+                        <div id="dropdown-modalidad" class="hidden absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto custom-scrollbar p-1"></div>
+                    </div>
+
+                    <!-- ALTERNATIVA DE POSTULACIÓN -->
+                    <div class="filter-wrapper relative">
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Alt. de Postulación</label>
+                        <div class="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-700 hover:border-blue-400 flex justify-between cursor-pointer" onclick="toggleMultiSelect('dropdown-alternativa', event)">
+                            <span id="label-alternativa" class="truncate pr-2 font-medium">Todas las Alternativas</span>
+                            <i class="fa-solid fa-chevron-down text-slate-400"></i>
+                        </div>
+                        <div id="dropdown-alternativa" class="hidden absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto custom-scrollbar p-1"></div>
                     </div>
                 </div>
             </aside>
@@ -269,6 +290,8 @@
             region: "Maule", 
             provincia: [], 
             llamado: [],
+            modalidad: [],       // NUEVO
+            alternativa: [],     // NUEVO
             mapComuna: "",   
             mapId: ""  
         };
@@ -356,6 +379,8 @@
                     year: yearMatch ? yearMatch[0] : "S/I",
                     llamado: (nr['numero llamado'] || "S/I").toString(),
                     fecha: formatDate(nr['fecha']),
+                    modalidad: nr['modalidad'] || "S/I",                               // NUEVO
+                    alternativa: nr['alternativa de postulacion'] || "S/I",            // NUEVO
                     region: nr['region'] || "Sin Región",
                     provincia: nr['provincia'] || "Sin Provincia",
                     comuna: nr['comuna'] || "Sin Comuna",
@@ -377,6 +402,8 @@
                     f_disc: parseNum(nr['discapacidad']) + parseNum(nr['movilidad reducida']),
                     f_eq: parseNum(nr['equipamiento']) + parseNum(nr['equipamiento (ley de aportes)']),
                     f_hab: parseNum(nr['habilitacion de terreno']),
+                    f_hab_adic: parseNum(nr['habilitacion de terreno adicional']),     // NUEVO
+                    f_albergue: parseNum(nr['albergue transitorio']),                  // NUEVO
                     f_terr: parseNum(nr['territores especiales']),
                     f_med: parseNum(nr['mediana escala']),
                     f_inc: parseNum(nr['incremento habitacional']),
@@ -483,12 +510,34 @@
                 const chk = activeFilters.llamado.includes(ll) ? 'checked' : '';
                 dropLlamado.innerHTML += `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" value="${ll}" onchange="handleMultiSelect('llamado', this.value, this.checked)" ${chk} class="mr-2"> Llamado N° ${ll}</label>`;
             });
-            document.getElementById('label-llamado').textContent = activeFilters.llamado.length === 0 ? "Todos los Llamados" : `${activeFilters.llamado.length} seleccionados`;
+            document.getElementById('label-llamado').textContent = activeFilters.llamado.length === 0 ? "Todos los Llamados" : `${activeFilters.llamado.length} seleccionadas`;
+
+            // MODALIDAD (NUEVO)
+            const modalidades = [...new Set(baseData.map(d => d.modalidad))].sort();
+            const dropModalidad = document.getElementById('dropdown-modalidad');
+            dropModalidad.innerHTML = `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer"><input type="checkbox" onchange="handleMultiSelect('modalidad', 'ALL', this.checked)" ${activeFilters.modalidad.length===0?'checked':''} class="mr-2"> <b>Todas las Modalidades</b></label><hr class="my-1">`;
+            modalidades.forEach(m => {
+                const chk = activeFilters.modalidad.includes(m) ? 'checked' : '';
+                dropModalidad.innerHTML += `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" value="${m}" onchange="handleMultiSelect('modalidad', this.value, this.checked)" ${chk} class="mr-2"> ${m}</label>`;
+            });
+            document.getElementById('label-modalidad').textContent = activeFilters.modalidad.length === 0 ? "Todas las Modalidades" : `${activeFilters.modalidad.length} seleccionadas`;
+
+            // ALTERNATIVA DE POSTULACIÓN (NUEVO)
+            const alternativas = [...new Set(baseData.map(d => d.alternativa))].sort();
+            const dropAlternativa = document.getElementById('dropdown-alternativa');
+            dropAlternativa.innerHTML = `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer"><input type="checkbox" onchange="handleMultiSelect('alternativa', 'ALL', this.checked)" ${activeFilters.alternativa.length===0?'checked':''} class="mr-2"> <b>Todas las Alternativas</b></label><hr class="my-1">`;
+            alternativas.forEach(a => {
+                const chk = activeFilters.alternativa.includes(a) ? 'checked' : '';
+                dropAlternativa.innerHTML += `<label class="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-xs"><input type="checkbox" value="${a}" onchange="handleMultiSelect('alternativa', this.value, this.checked)" ${chk} class="mr-2"> ${a}</label>`;
+            });
+            document.getElementById('label-alternativa').textContent = activeFilters.alternativa.length === 0 ? "Todas las Alternativas" : `${activeFilters.alternativa.length} seleccionadas`;
 
             // APLICAR
             filteredData = baseData.filter(d => 
                 (activeFilters.llamado.length === 0 || activeFilters.llamado.includes(d.llamado)) &&
-                (activeFilters.provincia.length === 0 || activeFilters.provincia.includes(d.provincia))
+                (activeFilters.provincia.length === 0 || activeFilters.provincia.includes(d.provincia)) &&
+                (activeFilters.modalidad.length === 0 || activeFilters.modalidad.includes(d.modalidad)) &&
+                (activeFilters.alternativa.length === 0 || activeFilters.alternativa.includes(d.alternativa))
             );
 
             updateDashboard();
@@ -663,11 +712,12 @@
                 return;
             }
 
-            let sums = { base:0, loc:0, fact:0, dens:0, grup:0, disc:0, eq:0, hab:0, terr:0, med:0, inc:0, prem:0, asist:0, fto:0, cbr:0 };
+            let sums = { base:0, loc:0, fact:0, dens:0, grup:0, disc:0, eq:0, hab:0, hab_adic:0, albergue:0, terr:0, med:0, inc:0, prem:0, asist:0, fto:0, cbr:0 };
             
             projects.forEach(p => {
                 sums.base += p.f_base; sums.loc += p.f_loc; sums.fact += p.f_fact; sums.dens += p.f_dens;
                 sums.grup += p.f_grup; sums.disc += p.f_disc; sums.eq += p.f_eq; sums.hab += p.f_hab;
+                sums.hab_adic += p.f_hab_adic; sums.albergue += p.f_albergue; // NUEVO
                 sums.terr += p.f_terr; sums.med += p.f_med; sums.inc += p.f_inc; sums.prem += p.f_prem;
                 sums.asist += p.g_asist; sums.fto += p.g_fto; sums.cbr += p.g_cbr;
             });
@@ -679,6 +729,8 @@
                 { label: 'Localización', data: [sums.loc, 0], backgroundColor: '#1d4ed8' },
                 { label: 'Factibilidad', data: [sums.fact, 0], backgroundColor: '#2563eb' },
                 { label: 'Equipamiento', data: [sums.eq, 0], backgroundColor: '#3b82f6' },
+                { label: 'Hab. Terreno Adicional', data: [sums.hab_adic, 0], backgroundColor: '#818cf8' }, // NUEVO
+                { label: 'Albergue Transitorio', data: [sums.albergue, 0], backgroundColor: '#c084fc' }, // NUEVO
                 { label: 'Premio Ahorro', data: [sums.prem, 0], backgroundColor: '#60a5fa' },
                 { label: 'Otros Costos Directos', data: [otrosCostos, 0], backgroundColor: '#93c5fd' },
                 { label: 'Asistencia Técnica', data: [0, sums.asist], backgroundColor: '#b45309' },
@@ -765,4 +817,4 @@
         }
     </script>
 </body>
-</html> 
+</html>
